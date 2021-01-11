@@ -1,0 +1,355 @@
+/* eslint-disable prefer-const */
+/* eslint-disable @typescript-eslint/explicit-function-return-type */
+/* eslint-disable unicorn/consistent-function-scoping */
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-empty-function */
+/**
+ * Use case:
+Let’s look at a concrete use-case that we can use as a basis to experiment with different implementations.
+
+Say that we have some kind of web app with users, and each user has a “profile” with their name, email, preferences, etc. A use-case for updating their profile might be something like this:
+
+Receive a new profile (parsed from a JSON request, say)
+Read the user’s current profile from the database
+If the profile has changed, update the user’s profile in the database
+If the email has changed, send a verification email message to the user’s new email
+We will also add a little bit of logging into the mix.
+ */
+
+// import {Either, right} from 'fp-ts/lib/Either';
+
+// type AsyncFunction<TResult> = () => Promise<TResult>;
+
+// the types
+
+// business types
+type UserId = number;
+type UserName = string;
+type EmailAddress = string;
+
+type Profile = {
+  userId: UserId;
+  name: UserName;
+  emailAddress: EmailAddress;
+};
+
+type EmailMessage = {
+  To: EmailAddress;
+  Body: string;
+};
+
+// Infra types
+type ILogger = {
+  Info: (message: string) => void;
+  Error: (message: string) => void;
+};
+
+type InfrastructureError = Error;
+
+type DbConnection = () => void; // dummy definition
+
+type Result<TError, T> = T | TError;
+
+type IDbService = {
+  NewDbConnection: () => DbConnection;
+  QueryProfile: (
+    dbConnection: DbConnection
+  ) => (userId: UserId) => Promise<Result<InfrastructureError, Profile>>;
+  UpdateProfile: (
+    dbConnection: DbConnection
+  ) => (profile: Profile) => Promise<Result<InfrastructureError, void>>;
+};
+
+type SmtpCredentials = () => void; // dummy definition
+
+type IEmailService = {
+  SendChangeNotification: (
+    smtpCredentials: SmtpCredentials
+  ) => (emailMessage: EmailMessage) => Promise<Result<InfrastructureError, void>>;
+};
+
+// Approach #1: Dependency retention
+
+const defaultDbService: IDbService = {
+  NewDbConnection: () => (): void => {},
+  QueryProfile: dbConnection => (userId: UserId) =>
+    Promise.resolve({
+      userId,
+      name: 'MarcoPolo',
+      emailAddress: 'marcopolo@mp.com'
+    }),
+  UpdateProfile: (dbConnection: DbConnection) => (profile: Profile) => Promise.resolve(undefined)
+};
+
+const defaultSmtpCredentials: SmtpCredentials = () => {};
+
+const globalLogger: ILogger = {
+  Info: (message: string) => {},
+  Error: (message: string) => {}
+};
+
+const defaultEmailService: IEmailService = {
+  SendChangeNotification: smtpCredentials => () => Promise.resolve(undefined)
+};
+
+const updateCustomerProfileDepRet = async function* (
+  newProfile: Profile
+): AsyncGenerator<unknown, void, unknown> {
+  const dbConnection = defaultDbService.NewDbConnection();
+  const smtpCredentials = defaultSmtpCredentials;
+  const currentProfile = await defaultDbService.QueryProfile(dbConnection)(newProfile.userId);
+
+  if (currentProfile !== newProfile) {
+    globalLogger.Info('Updating Profile');
+    yield defaultDbService.UpdateProfile(dbConnection)(newProfile);
+  }
+
+  if ((currentProfile as Profile).emailAddress !== newProfile.emailAddress) {
+    const emailMessage = {
+      To: newProfile.emailAddress,
+      Body: 'Please verify your email'
+    };
+    globalLogger.Info('Sending email');
+    yield defaultEmailService.SendChangeNotification(smtpCredentials)(emailMessage);
+  }
+};
+
+// -----------------------------------------------------------------------------------------------
+// Dependency rejection
+
+type Decision =
+  | ['NoAction', undefined]
+  | [
+      'UpdateProfileOnly',
+      {
+        profile: Profile;
+      }
+    ]
+  | [
+      'UpdateProfileAndNotify',
+      {
+        profile: Profile;
+        emailMessage: EmailMessage;
+      }
+    ];
+
+const pureUpdateCustomerProfileDR = (
+  newProfile: Profile,
+  currentProfile: Result<Error, Profile>
+): Decision => {
+  if (currentProfile !== newProfile) {
+    globalLogger.Info('Updating Profile');
+    if (currentProfile.emailAddress !== newProfile.emailAddress) {
+      const emailMessage: EmailMessage = {
+        To: newProfile.emailAddress,
+        Body: 'Please verify your email'
+      };
+      globalLogger.Info('Sending email');
+      return [
+        'UpdateProfileAndNotify',
+        {
+          profile: newProfile,
+          emailMessage
+        }
+      ];
+    } else {
+      return [
+        'UpdateProfileOnly',
+        {
+          profile: newProfile
+        }
+      ];
+    }
+  } else {
+    return ['NoAction', undefined];
+  }
+};
+
+const updateCustomerProfileDR = async function* (
+  newProfile: Profile
+): AsyncGenerator<unknown, void, unknown> {
+  const dbConnection = defaultDbService.NewDbConnection();
+  const smtpCredentials = defaultSmtpCredentials;
+
+  // ----------- impure ----------------
+  const currentProfile = await defaultDbService.QueryProfile(dbConnection)(newProfile.userId);
+  yield currentProfile;
+
+  // ----------- pure ----------------
+  const [decision, result] = pureUpdateCustomerProfileDR(newProfile, currentProfile);
+
+  // ----------- impure ----------------
+  switch (decision) {
+    case 'NoAction':
+      return;
+    case 'UpdateProfileOnly':
+      yield defaultDbService.UpdateProfile(dbConnection)(result.profile);
+      break;
+    case 'UpdateProfileAndNotify':
+      yield defaultDbService.UpdateProfile(dbConnection)(result.profile);
+      yield defaultEmailService.SendChangeNotification(smtpCredentials)(result.emailMessage);
+      break;
+  }
+};
+
+// -----------------------------------------------------------------------------------------------
+//  Dependency parameterization
+
+const pureUpdateCustomerProfileDP = (
+  newProfile: Profile,
+  currentProfile: Profile,
+  logger: ILogger
+): Decision => {
+  if (currentProfile !== newProfile) {
+    logger.Info('Updating Profile');
+    if (currentProfile.emailAddress !== newProfile.emailAddress) {
+      const emailMessage: EmailMessage = {
+        To: newProfile.emailAddress,
+        Body: 'Please verify your email'
+      };
+      logger.Info('Sending email');
+      return [
+        'UpdateProfileAndNotify',
+        {
+          profile: newProfile,
+          emailMessage
+        }
+      ];
+    } else {
+      return [
+        'UpdateProfileOnly',
+        {
+          profile: newProfile
+        }
+      ];
+    }
+  } else {
+    return ['NoAction', undefined];
+  }
+};
+
+type IServices = {
+  logger: ILogger;
+  dbService: IDbService;
+  emailService: IEmailService;
+};
+
+const updateCustomerProfileDP = async function* (
+  newProfile: Profile,
+  services: IServices
+): AsyncGenerator<unknown, void, unknown> {
+  const dbConnection = defaultDbService.NewDbConnection();
+  const smtpCredentials = defaultSmtpCredentials;
+
+  // ----------- impure ----------------
+  const currentProfile = await defaultDbService.QueryProfile(dbConnection)(newProfile.userId);
+  yield currentProfile;
+
+  // ----------- pure ----------------
+  const [decision, result] = pureUpdateCustomerProfileDP(
+    newProfile,
+    currentProfile,
+    services.logger
+  );
+
+  // ----------- impure ----------------
+  switch (decision) {
+    case 'NoAction':
+      return;
+    case 'UpdateProfileOnly':
+      yield services.dbService.UpdateProfile(dbConnection)(result.profile);
+      break;
+    case 'UpdateProfileAndNotify':
+      yield services.dbService.UpdateProfile(dbConnection)(result.profile);
+      yield services.emailService.SendChangeNotification(smtpCredentials)(result.emailMessage);
+      break;
+  }
+};
+
+// very similar to ports?
+
+const updateCustomerProfileDP = (services: IServices) =>
+  async function* (newProfile: Profile): AsyncGenerator<unknown, void, unknown> {
+    const dbConnection = defaultDbService.NewDbConnection();
+    const smtpCredentials = defaultSmtpCredentials;
+
+    // ----------- impure ----------------
+    const currentProfile = await defaultDbService.QueryProfile(dbConnection)(newProfile.userId);
+    yield currentProfile;
+
+    // ----------- pure ----------------
+    const [decision, result] = pureUpdateCustomerProfileDP(
+      newProfile,
+      currentProfile,
+      services.logger
+    );
+
+    // ----------- impure ----------------
+    switch (decision) {
+      case 'NoAction':
+        return;
+      case 'UpdateProfileOnly':
+        yield services.dbService.UpdateProfile(dbConnection)(result.profile);
+        break;
+      case 'UpdateProfileAndNotify':
+        yield services.dbService.UpdateProfile(dbConnection)(result.profile);
+        yield services.emailService.SendChangeNotification(smtpCredentials)(result.emailMessage);
+        break;
+    }
+  };
+
+// -----------------------------------------------------------------------------------------------
+// Reader monad
+// Delaying the injection of dependencies
+
+// Simple reader Monad
+function reader(k: Function) {
+  return {
+    run: (e: Function) => {
+      return k(e);
+    },
+    bind: (f: Function) => {
+      return reader(function (e: Function) {
+        return f(k(e)).run(e);
+      });
+    },
+    map: (f: Function) => {
+      return reader(function (e: Function) {
+        return f(k(e));
+      });
+    }
+  };
+}
+
+const pureUpdateCustomerProfileRM = (
+  newProfile: Profile,
+  currentProfile: Profile,
+  logger: ILogger
+): Decision => {
+  if (currentProfile !== newProfile) {
+    logger.Info('Updating Profile');
+    if (currentProfile.emailAddress !== newProfile.emailAddress) {
+      const emailMessage: EmailMessage = {
+        To: newProfile.emailAddress,
+        Body: 'Please verify your email'
+      };
+      logger.Info('Sending email');
+      return [
+        'UpdateProfileAndNotify',
+        {
+          profile: newProfile,
+          emailMessage
+        }
+      ];
+    } else {
+      return [
+        'UpdateProfileOnly',
+        {
+          profile: newProfile
+        }
+      ];
+    }
+  } else {
+    return ['NoAction', undefined];
+  }
+};
