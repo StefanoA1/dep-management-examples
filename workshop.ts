@@ -1,4 +1,3 @@
-/* eslint-disable prefer-const */
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
 /* eslint-disable unicorn/consistent-function-scoping */
 /* eslint-disable @typescript-eslint/no-unused-vars */
@@ -16,9 +15,9 @@ If the email has changed, send a verification email message to the user’s new 
 We will also add a little bit of logging into the mix.
  */
 
-// import {Either, right} from 'fp-ts/lib/Either';
+import * as R from 'fp-ts/lib/Reader';
 
-// type AsyncFunction<TResult> = () => Promise<TResult>;
+// --------------------------------------------------
 
 // the types
 
@@ -266,9 +265,9 @@ const updateCustomerProfileDP = async function* (
   }
 };
 
-// very similar to ports?
+// very similar to ports? services -> function -> result
 
-const updateCustomerProfileDP = (services: IServices) =>
+const updateCustomerProfileDP2 = (services: IServices) =>
   async function* (newProfile: Profile): AsyncGenerator<unknown, void, unknown> {
     const dbConnection = defaultDbService.NewDbConnection();
     const smtpCredentials = defaultSmtpCredentials;
@@ -303,29 +302,28 @@ const updateCustomerProfileDP = (services: IServices) =>
 // Delaying the injection of dependencies
 
 // Simple reader Monad
-function reader(k: Function) {
-  return {
-    run: (e: Function) => {
-      return k(e);
-    },
-    bind: (f: Function) => {
-      return reader(function (e: Function) {
-        return f(k(e)).run(e);
-      });
-    },
-    map: (f: Function) => {
-      return reader(function (e: Function) {
-        return f(k(e));
-      });
-    }
-  };
-}
+// function reader(k: Function) {
+//   return {
+//     run: (e: Function) => {
+//       return k(e);
+//     },
+//     bind: (f: Function) => {
+//       return reader(function (e: Function) {
+//         return f(k(e)).run(e);
+//       });
+//     },
+//     map: (f: Function) => {
+//       return reader(function (e: Function) {
+//         return f(k(e));
+//       });
+//     }
+//   };
+// }
 
-const pureUpdateCustomerProfileRM = (
+const pureUpdateCustomerProfileReader = (
   newProfile: Profile,
-  currentProfile: Profile,
-  logger: ILogger
-): Decision => {
+  currentProfile: Profile
+): R.Reader<ILogger, Decision> => (logger: ILogger) => {
   if (currentProfile !== newProfile) {
     logger.Info('Updating Profile');
     if (currentProfile.emailAddress !== newProfile.emailAddress) {
@@ -353,3 +351,33 @@ const pureUpdateCustomerProfileRM = (
     return ['NoAction', undefined];
   }
 };
+
+const updateCustomerProfileRM = (services: IServices) =>
+  async function* (newProfile: Profile): AsyncGenerator<unknown, void, unknown> {
+    const dbConnection = defaultDbService.NewDbConnection();
+    const smtpCredentials = defaultSmtpCredentials;
+
+    // ----------- impure ----------------
+    const currentProfile = await defaultDbService.QueryProfile(dbConnection)(newProfile.userId);
+    yield currentProfile;
+
+    // ----------- pure ----------------
+    const reader: R.Reader<ILogger, Decision> = R.reader.map(
+      pureUpdateCustomerProfileReader(newProfile, currentProfile),
+      _decision => _decision
+    );
+    const [decision, result] = reader(services.logger);
+
+    // ----------- impure ----------------
+    switch (decision) {
+      case 'NoAction':
+        return;
+      case 'UpdateProfileOnly':
+        yield services.dbService.UpdateProfile(dbConnection)(result.profile);
+        break;
+      case 'UpdateProfileAndNotify':
+        yield services.dbService.UpdateProfile(dbConnection)(result.profile);
+        yield services.emailService.SendChangeNotification(smtpCredentials)(result.emailMessage);
+        break;
+    }
+  };
