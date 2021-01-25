@@ -67,7 +67,20 @@ type IEmailService = {
   ) => (emailMessage: EmailMessage) => Promise<Result<InfrastructureError, void>>;
 };
 
-// Approach #1: Dependency retention
+// Approach #1: Dependency retention -- retention des dépendances
+/*
+Il ya pas de abstraction ou paramétrisation,
+Le code décisionnel et code impure (IO, del externes.. etc) sont melangés
+
+Pros:
+- Rapid à faire (scriptings, prototypes, etc)
+
+Cons:
+- Pas facile à tester (ou meme pas testable de tout)
+- Difficile de refactor (car en chaine pas facile à tester, donc pas backup des tests fiables)
+- Les sections de code que pourraient être déterministes sont mélangés 
+
+*/
 
 const defaultDbService: IDbService = {
   NewDbConnection: () => (): void => {},
@@ -381,3 +394,9 @@ const updateCustomerProfileRM = (services: IServices) =>
         break;
     }
   };
+
+
+// -----------------------------------------------------------------------------------------------
+// Dependency interpretation
+
+
