@@ -78,7 +78,7 @@ Pros:
 Cons:
 - Pas facile à tester (ou meme pas testable de tout)
 - Difficile de refactor (car en chaine pas facile à tester, donc pas backup des tests fiables)
-- Les sections de code que pourraient être déterministes sont mélangés 
+- Les sections de code que pourraient être déterministes sont mélangés
 
 */
 
@@ -128,6 +128,21 @@ const updateCustomerProfileDepRet = async function* (
 
 // -----------------------------------------------------------------------------------------------
 // Dependency rejection
+
+/*
+Le code décisionnel et code impure (IO, del externes.. etc) sont (presque) séparés 
+
+Pros:
+- C'est aussi rapid à faire.
+- La partie décisionnel (déterministe) du code devient testable
+- La partie I/O c'est plus claire à comprendre
+- Un peu plus facile à refactor que si le code était écrit à la Dependency retention (au moins pour la partie décisionnel)
+
+Cons:
+- Pas facile à tester l'ensemble du code (la partie i/o et archi c'est encore pas facilement, voir meme pas, testable)
+- Difficile de refactor s'il y a des modifications de l'architecture du code
+
+*/
 
 type Decision =
   | ['NoAction', undefined]
@@ -395,8 +410,5 @@ const updateCustomerProfileRM = (services: IServices) =>
     }
   };
 
-
 // -----------------------------------------------------------------------------------------------
 // Dependency interpretation
-
-
