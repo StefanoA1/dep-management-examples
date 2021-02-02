@@ -83,7 +83,7 @@ Cons:
 */
 
 const defaultDbService: IDbService = {
-  NewDbConnection: () => (): void => {},
+  NewDbConnection: () => (): void => { },
   QueryProfile: dbConnection => (userId: UserId) =>
     Promise.resolve({
       userId,
@@ -93,11 +93,11 @@ const defaultDbService: IDbService = {
   UpdateProfile: (dbConnection: DbConnection) => (profile: Profile) => Promise.resolve(undefined)
 };
 
-const defaultSmtpCredentials: SmtpCredentials = () => {};
+const defaultSmtpCredentials: SmtpCredentials = () => { };
 
 const globalLogger: ILogger = {
-  Info: (message: string) => {},
-  Error: (message: string) => {}
+  Info: (message: string) => { },
+  Error: (message: string) => { }
 };
 
 const defaultEmailService: IEmailService = {
@@ -147,18 +147,18 @@ Cons:
 type Decision =
   | ['NoAction', undefined]
   | [
-      'UpdateProfileOnly',
-      {
-        profile: Profile;
-      }
-    ]
+    'UpdateProfileOnly',
+    {
+      profile: Profile;
+    }
+  ]
   | [
-      'UpdateProfileAndNotify',
-      {
-        profile: Profile;
-        emailMessage: EmailMessage;
-      }
-    ];
+    'UpdateProfileAndNotify',
+    {
+      profile: Profile;
+      emailMessage: EmailMessage;
+    }
+  ];
 
 const pureUpdateCustomerProfileDR = (
   newProfile: Profile,
@@ -221,6 +221,20 @@ const updateCustomerProfileDR = async function* (
 
 // -----------------------------------------------------------------------------------------------
 //  Dependency parameterization
+/*
+Le code décisionnel et code impure (IO, del externes.. etc) sont séparés, les dependances sont données 
+
+Pros:
+- C'est aussi rapid à faire.
+- La partie décisionnel (déterministe) du code devient testable
+- La partie I/O c'est plus claire à comprendre
+- Un peu plus facile à refactor que si le code était écrit à la Dependency retention (au moins pour la partie décisionnel)
+
+Cons:
+- Pas facile à tester l'ensemble du code (la partie i/o et archi c'est encore pas facilement, voir meme pas, testable)
+- Difficile de refactor s'il y a des modifications de l'architecture du code
+
+*/
 
 const pureUpdateCustomerProfileDP = (
   newProfile: Profile,
@@ -412,3 +426,140 @@ const updateCustomerProfileRM = (services: IServices) =>
 
 // -----------------------------------------------------------------------------------------------
 // Dependency interpretation
+
+type LoggerInstruction = ['Info', string] | ['Error', string];
+type DbInstruction = ['Query', UserId] | ['Update', Profile];
+type EmailInstruction = ['SendChangeNotification', EmailMessage];
+type Instruction = LoggerInstruction | DbInstruction | EmailInstruction;
+
+const app: Generator<Instruction, void, unknown> = function* (newProfile: Profile) {
+  const currentProfile = yield ['Query', newProfile.userId];
+
+  if (currentProfile !== newProfile) {
+    yield ['Info', 'Updating Profile'];
+    if (currentProfile.emailAddress !== newProfile.emailAddress) {
+      const emailMessage: EmailMessage = {
+        To: newProfile.emailAddress,
+        Body: 'Please verify your email'
+      };
+      yield ['Info', 'Sending email'];
+      yield ['Update', newProfile];
+      yield ['SendChangeNotification', emailMessage];
+    } else {
+      yield ['Update', newProfile];
+    }
+  } else {
+    return;
+  }
+};
+
+const interpret = (instruction: Instruction, next: (data: unknown) => void) => {
+  switch (instruction[0]) {
+    case 'Info': {
+      globalLogger.Info(instruction[1]);
+      return next();
+    }
+    case 'Error': {
+      globalLogger.Error(instruction[1]);
+      return next();
+    }
+    case 'Query': {
+      const dbConnection = defaultDbService.NewDbConnection();
+      const currentProfile = defaultDbService.QueryProfile(dbConnection)(instruction[1]));
+      return next();
+    }
+    case 'Update': {
+      const dbConnection = defaultDbService.NewDbConnection();
+      globalLogger.Error(instruction[1]);
+      return next();
+    }
+    case 'SendChangeNotification': {
+      defaultEmailService.SendChangeNotification(instruction[1]);
+      return next();
+    }
+  }
+};
+
+
+
+
+const run = <T, R>(interpret: (instruction: T, next: (data: unknown) => void) => void) => (app: Generator<T, R, unknown>) => {
+  const loop = (nextValue) => {
+    const { done, value } = app.next(nextValue);
+    if (done) return value;
+    interpret(value, loop)
+  }
+
+  return loop(undefined);
+};
+
+run(interpret)(app);
+
+
+
+type Reader<E, T> = (env: E) => Promise<T>;
+type App<A, E, T> = (a: A) => Reader<E, T>;
+
+const runReader = <E, T>(env: E, fa: Reader<E, T>): Promise<T> => fa(env);
+
+const pure = <E, T>(a: T): Reader<E, T> => () => Promise.resolve(a);
+
+const map = <E, A, B>(fa: Reader<E, A>, ab: (a: A) => B): Reader<E, B> => {
+  return (env: E) => runReader<E, A>(env, fa).then(ab);
+}
+
+const fmap = <E, A, B>(fa: Reader<E, A>, afb: (a: A) => Reader<E, B>): Reader<E, B> => {
+  return (env: E) => {
+    return runReader<E, A>(env, fa).then(a => 
+      runReader(env, afb(a))
+    );
+  }
+}
+
+
+const logInfo: App<string, IServices, void> = (message: string) => (env: IServices) => Promise.resolve(env.logger.Info(message));
+const update: App<Profile, IServices, void> = (profile: Profile) => async (env: IServices) =>  {
+  const dbConnection = defaultDbService.NewDbConnection();
+  await env.dbService.UpdateProfile(dbConnection)(profile)
+};
+const sendChangeNotification: App<EmailMessage, IServices, void> = (emailMessage: EmailMessage) =>  async (env: IServices) => {
+  await env.emailService.SendChangeNotification(defaultSmtpCredentials)(emailMessage);
+};
+
+const queryProfile: App<number, IServices, Profile> = (userId: number) => (env: IServices) => {
+  const dbConnection_ = env.dbService.NewDbConnection();
+  return env.dbService.QueryProfile(dbConnection_)(userId) as Promise<Profile>;
+}
+
+const sendEmailLog = logInfo('Sending email');
+
+const app: App<Profile, IServices, void> = (newProfile: Profile) => 
+  fmap(
+    queryProfile(newProfile.userId),
+    (currentProfile)=> {
+      if (currentProfile !== newProfile) {
+        return fmap(logInfo('Updating Profile'), () => {
+          if (currentProfile.emailAddress !== newProfile.emailAddress) {
+            const emailMessage: EmailMessage = {
+              To: newProfile.emailAddress,
+              Body: 'Please verify your email'
+            };
+            return fmap(sendEmailLog, () => 
+              fmap(update(newProfile), () => 
+                sendChangeNotification(emailMessage)
+              )
+            );
+          } else {
+            return update(newProfile);
+          }
+        });
+      } else {
+        return pure(undefined);
+      }
+
+    });
+
+const job = app(newProfileA);
+
+runReader(testServices, job);
+runReader(prodServices, job);
