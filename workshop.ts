@@ -222,17 +222,15 @@ const updateCustomerProfileDR = async function* (
 // -----------------------------------------------------------------------------------------------
 //  Dependency parameterization
 /*
-Le code décisionnel et code impure (IO, del externes.. etc) sont séparés, les dependances sont données 
+Le code décisionnel et code impure (IO, del externes.. etc) sont séparés, les dependances sont données explicitement 
 
 Pros:
-- C'est aussi rapid à faire.
-- La partie décisionnel (déterministe) du code devient testable
-- La partie I/O c'est plus claire à comprendre
-- Un peu plus facile à refactor que si le code était écrit à la Dependency retention (au moins pour la partie décisionnel)
+- Initialement ça peut prendre plus de temps mais le code devient très flexible pour les modifications
+- Tout le code devient testable, le code d'infra/IO est injecté, donc pas compliqué à tester en TU
+- La partie I/O devient plus claire à comprendre
 
 Cons:
-- Pas facile à tester l'ensemble du code (la partie i/o et archi c'est encore pas facilement, voir meme pas, testable)
-- Difficile de refactor s'il y a des modifications de l'architecture du code
+- Prends plus de temps initialement pour mettre en place
 
 */
 
@@ -307,13 +305,13 @@ const updateCustomerProfileDP = async function* (
   }
 };
 
+// const dbConnection = defaultDbService.NewDbConnection();
+// const smtpCredentials = defaultSmtpCredentials;
 // very similar to ports? services -> function -> result
 
-const updateCustomerProfileDP2 = (services: IServices) =>
-  async function* (newProfile: Profile): AsyncGenerator<unknown, void, unknown> {
-    const dbConnection = defaultDbService.NewDbConnection();
-    const smtpCredentials = defaultSmtpCredentials;
-
+const updateCustomerProfileDP2 = (services: IServices, dbConnection: DbConnection, smtpCredentials: SmtpCredentials) =>
+  {
+    return async function* (newProfile: Profile): AsyncGenerator<unknown, void, unknown> {
     // ----------- impure ----------------
     const currentProfile = await defaultDbService.QueryProfile(dbConnection)(newProfile.userId);
     yield currentProfile;
@@ -337,7 +335,7 @@ const updateCustomerProfileDP2 = (services: IServices) =>
         yield services.emailService.SendChangeNotification(smtpCredentials)(result.emailMessage);
         break;
     }
-  };
+  }};
 
 // -----------------------------------------------------------------------------------------------
 // Reader monad
@@ -395,10 +393,10 @@ const pureUpdateCustomerProfileReader = (
 };
 
 const updateCustomerProfileRM = (services: IServices) =>
-  async function* (newProfile: Profile): AsyncGenerator<unknown, void, unknown> {
+  {
     const dbConnection = defaultDbService.NewDbConnection();
     const smtpCredentials = defaultSmtpCredentials;
-
+    return async function* (newProfile: Profile): AsyncGenerator<unknown, void, unknown> {
     // ----------- impure ----------------
     const currentProfile = await defaultDbService.QueryProfile(dbConnection)(newProfile.userId);
     yield currentProfile;
@@ -422,7 +420,7 @@ const updateCustomerProfileRM = (services: IServices) =>
         yield services.emailService.SendChangeNotification(smtpCredentials)(result.emailMessage);
         break;
     }
-  };
+  }};
 
 // -----------------------------------------------------------------------------------------------
 // Dependency interpretation
