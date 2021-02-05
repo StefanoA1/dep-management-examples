@@ -17,6 +17,7 @@ We will also add a little bit of logging into the mix.
 
 import * as R from 'fp-ts/lib/Reader';
 
+
 // --------------------------------------------------
 
 // the types
