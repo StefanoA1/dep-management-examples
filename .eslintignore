@@ -1,0 +1,13 @@
+**/node_modules
+**/.nyc_output
+**/.serverless
+**/.webpack
+**/coverage
+**/scripts
+**/explorer
+**/dist
+*.yml
+*.md
+*.sh
+tmp
+**/zip

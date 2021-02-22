@@ -22,7 +22,7 @@ import * as R from 'fp-ts/lib/Reader';
 // the types
 
 // business types
-type UserId = number;
+type UserId = string;
 type UserName = string;
 type EmailAddress = string;
 
@@ -83,7 +83,7 @@ Cons:
 */
 
 const defaultDbService: IDbService = {
-  NewDbConnection: () => (): void => { },
+  NewDbConnection: () => (): void => {},
   QueryProfile: dbConnection => (userId: UserId) =>
     Promise.resolve({
       userId,
@@ -93,11 +93,11 @@ const defaultDbService: IDbService = {
   UpdateProfile: (dbConnection: DbConnection) => (profile: Profile) => Promise.resolve(undefined)
 };
 
-const defaultSmtpCredentials: SmtpCredentials = () => { };
+const defaultSmtpCredentials: SmtpCredentials = () => {};
 
 const globalLogger: ILogger = {
-  Info: (message: string) => { },
-  Error: (message: string) => { }
+  Info: (message: string) => {},
+  Error: (message: string) => {}
 };
 
 const defaultEmailService: IEmailService = {
@@ -147,24 +147,24 @@ Cons:
 type Decision =
   | ['NoAction', undefined]
   | [
-    'UpdateProfileOnly',
-    {
-      profile: Profile;
-    }
-  ]
+      'UpdateProfileOnly',
+      {
+        profile: Profile;
+      }
+    ]
   | [
-    'UpdateProfileAndNotify',
-    {
-      profile: Profile;
-      emailMessage: EmailMessage;
-    }
-  ];
+      'UpdateProfileAndNotify',
+      {
+        profile: Profile;
+        emailMessage: EmailMessage;
+      }
+    ];
 
 const pureUpdateCustomerProfileDR = (
   newProfile: Profile,
   currentProfile: Result<Error, Profile>
 ): Decision => {
-  if (currentProfile !== newProfile) {
+  if (currentProfile !== newProfile && (currentProfile as Profile).emailAddress) {
     globalLogger.Info('Updating Profile');
     if (currentProfile.emailAddress !== newProfile.emailAddress) {
       const emailMessage: EmailMessage = {
@@ -210,11 +210,18 @@ const updateCustomerProfileDR = async function* (
     case 'NoAction':
       return;
     case 'UpdateProfileOnly':
-      yield defaultDbService.UpdateProfile(dbConnection)(result.profile);
+      if (result && result.profile)
+        yield defaultDbService.UpdateProfile(dbConnection)(result && result.profile);
+      else return;
       break;
     case 'UpdateProfileAndNotify':
-      yield defaultDbService.UpdateProfile(dbConnection)(result.profile);
-      yield defaultEmailService.SendChangeNotification(smtpCredentials)(result.emailMessage);
+      if (result && result.profile) {
+        yield defaultDbService.UpdateProfile(dbConnection)(result.profile);
+        yield defaultEmailService.SendChangeNotification(smtpCredentials)({
+          To: result.profile.emailAddress,
+          Body: 'Please verify your email'
+        });
+      }
       break;
   }
 };
@@ -298,11 +305,18 @@ const updateCustomerProfileDP = async function* (
     case 'NoAction':
       return;
     case 'UpdateProfileOnly':
-      yield services.dbService.UpdateProfile(dbConnection)(result.profile);
+      if (result && result.profile)
+        yield services.dbService.UpdateProfile(dbConnection)(result.profile);
       break;
     case 'UpdateProfileAndNotify':
-      yield services.dbService.UpdateProfile(dbConnection)(result.profile);
-      yield services.emailService.SendChangeNotification(smtpCredentials)(result.emailMessage);
+      if (result && result.profile) {
+        yield services.dbService.UpdateProfile(dbConnection)(result.profile);
+        yield services.emailService.SendChangeNotification(smtpCredentials)({
+          To: result.profile.emailAddress,
+          Body: 'Please verify your email'
+        });
+      }
+
       break;
   }
 };
@@ -311,9 +325,12 @@ const updateCustomerProfileDP = async function* (
 // const smtpCredentials = defaultSmtpCredentials;
 // very similar to ports? services -> function -> result
 
-const updateCustomerProfileDP2 = (services: IServices, dbConnection: DbConnection, smtpCredentials: SmtpCredentials) =>
-  {
-    return async function* (newProfile: Profile): AsyncGenerator<unknown, void, unknown> {
+const updateCustomerProfileDP2 = (
+  services: IServices,
+  dbConnection: DbConnection,
+  smtpCredentials: SmtpCredentials
+) => {
+  return async function* (newProfile: Profile): AsyncGenerator<unknown, void, unknown> {
     // ----------- impure ----------------
     const currentProfile = await defaultDbService.QueryProfile(dbConnection)(newProfile.userId);
     yield currentProfile;
@@ -330,14 +347,22 @@ const updateCustomerProfileDP2 = (services: IServices, dbConnection: DbConnectio
       case 'NoAction':
         return;
       case 'UpdateProfileOnly':
-        yield services.dbService.UpdateProfile(dbConnection)(result.profile);
+        // TODO: check errors
+        if (result && result.profile)
+          yield services.dbService.UpdateProfile(dbConnection)(result.profile);
         break;
       case 'UpdateProfileAndNotify':
-        yield services.dbService.UpdateProfile(dbConnection)(result.profile);
-        yield services.emailService.SendChangeNotification(smtpCredentials)(result.emailMessage);
+        if (result && result.profile) {
+          yield services.dbService.UpdateProfile(dbConnection)(result.profile);
+          yield services.emailService.SendChangeNotification(smtpCredentials)({
+            To: result.profile.emailAddress,
+            Body: 'Please verify your email'
+          });
+        }
         break;
     }
-  }};
+  };
+};
 
 // -----------------------------------------------------------------------------------------------
 // Reader monad
@@ -390,11 +415,10 @@ const pureUpdateCustomerProfileReader = (
   }
 };
 
-const updateCustomerProfileRM = (services: IServices) =>
-  {
-    const dbConnection = defaultDbService.NewDbConnection();
-    const smtpCredentials = defaultSmtpCredentials;
-    return async function* (newProfile: Profile): AsyncGenerator<unknown, void, unknown> {
+const updateCustomerProfileRM = (services: IServices) => {
+  const dbConnection = defaultDbService.NewDbConnection();
+  const smtpCredentials = defaultSmtpCredentials;
+  return async function* (newProfile: Profile): AsyncGenerator<unknown, void, unknown> {
     // ----------- impure ----------------
     const currentProfile = await defaultDbService.QueryProfile(dbConnection)(newProfile.userId);
     yield currentProfile;
@@ -411,14 +435,21 @@ const updateCustomerProfileRM = (services: IServices) =>
       case 'NoAction':
         return;
       case 'UpdateProfileOnly':
-        yield services.dbService.UpdateProfile(dbConnection)(result.profile);
+        if (result && result.profile)
+          yield services.dbService.UpdateProfile(dbConnection)(result.profile);
         break;
       case 'UpdateProfileAndNotify':
-        yield services.dbService.UpdateProfile(dbConnection)(result.profile);
-        yield services.emailService.SendChangeNotification(smtpCredentials)(result.emailMessage);
+        if (result && result.profile) {
+          yield services.dbService.UpdateProfile(dbConnection)(result.profile);
+          yield services.emailService.SendChangeNotification(smtpCredentials)({
+            To: result.profile.emailAddress,
+            Body: 'Please verify your email'
+          });
+        }
         break;
     }
-  }};
+  };
+};
 
 type Reader<E, T> = (env: E) => Promise<T>;
 type App<A, E, T> = (a: A) => Reader<E, T>;
@@ -429,60 +460,60 @@ const pure = <E, T>(a: T): Reader<E, T> => () => Promise.resolve(a);
 
 const map = <E, A, B>(fa: Reader<E, A>, ab: (a: A) => B): Reader<E, B> => {
   return (env: E) => runReader<E, A>(env, fa).then(ab);
-}
+};
 
 const fmap = <E, A, B>(fa: Reader<E, A>, afb: (a: A) => Reader<E, B>): Reader<E, B> => {
   return (env: E) => {
-    return runReader<E, A>(env, fa).then(a => 
-      runReader(env, afb(a))
-    );
-  }
-}
-
-
-const logInfo: App<string, IServices, void> = (message: string) => (env: IServices) => Promise.resolve(env.logger.Info(message));
-const update: App<Profile, IServices, void> = (profile: Profile) => async (env: IServices) =>  {
-  const dbConnection = defaultDbService.NewDbConnection();
-  await env.dbService.UpdateProfile(dbConnection)(profile)
+    return runReader<E, A>(env, fa).then(a => runReader(env, afb(a)));
+  };
 };
-const sendChangeNotification: App<EmailMessage, IServices, void> = (emailMessage: EmailMessage) =>  async (env: IServices) => {
+
+const logInfo: App<string, IServices, void> = (message: string) => (env: IServices) =>
+  Promise.resolve(env.logger.Info(message));
+const update: App<Profile, IServices, void> = (profile: Profile) => async (env: IServices) => {
+  const dbConnection = defaultDbService.NewDbConnection();
+  await env.dbService.UpdateProfile(dbConnection)(profile);
+};
+const sendChangeNotification: App<EmailMessage, IServices, void> = (
+  emailMessage: EmailMessage
+) => async (env: IServices) => {
   await env.emailService.SendChangeNotification(defaultSmtpCredentials)(emailMessage);
 };
 
-const queryProfile: App<number, IServices, Profile> = (userId: number) => (env: IServices) => {
+const queryProfile: App<string, IServices, Profile> = (userId: string) => (env: IServices) => {
   const dbConnection_ = env.dbService.NewDbConnection();
   return env.dbService.QueryProfile(dbConnection_)(userId) as Promise<Profile>;
-}
+};
 
 const sendEmailLog = logInfo('Sending email');
 
-const app: App<Profile, IServices, void> = (newProfile: Profile) => 
-  fmap(
-    queryProfile(newProfile.userId),
-    (currentProfile)=> {
-      if (currentProfile !== newProfile) {
-        return fmap(logInfo('Updating Profile'), () => {
-          if (currentProfile.emailAddress !== newProfile.emailAddress) {
-            const emailMessage: EmailMessage = {
-              To: newProfile.emailAddress,
-              Body: 'Please verify your email'
-            };
-            return fmap(sendEmailLog, () => 
-              fmap(update(newProfile), () => 
-                sendChangeNotification(emailMessage)
-              )
-            );
-          } else {
-            return update(newProfile);
-          }
-        });
-      } else {
-        return pure(undefined);
-      }
+const appMonad: App<Profile, IServices, void> = (newProfile: Profile) =>
+  fmap(queryProfile(newProfile.userId), currentProfile => {
+    if (currentProfile !== newProfile) {
+      return fmap(logInfo('Updating Profile'), () => {
+        if (currentProfile.emailAddress !== newProfile.emailAddress) {
+          const emailMessage: EmailMessage = {
+            To: newProfile.emailAddress,
+            Body: 'Please verify your email'
+          };
+          return fmap(sendEmailLog, () =>
+            fmap(update(newProfile), () => sendChangeNotification(emailMessage))
+          );
+        } else {
+          return update(newProfile);
+        }
+      });
+    } else {
+      return pure(undefined);
+    }
+  });
 
-    });
-
-const job = app(newProfileA);
+const newProfileA: Profile = {
+  userId: 'someid1',
+  emailAddress: 'toto@coorpacademy.com',
+  name: 'Toto Foo'
+};
+const job = appMonad(newProfileA);
 
 runReader(testServices, job);
 runReader(prodServices, job);
@@ -490,13 +521,28 @@ runReader(prodServices, job);
 // -----------------------------------------------------------------------------------------------
 // Dependency interpretation
 
+/*
+Le code décisionnel et code impure (IO, del externes.. etc) sont séparés, les dependances sont données explicitement 
+
+Pros:
+- Le code d'infra/IO est injecté au moment d'appel de la fonction, donc pas compliqué à tester (le switch entre deps prod/test/dev/ etc c'est facile à faire)
+- Réduction de parametres necessaires 
+
+Cons:
+- Plus long à mettre en place (et même moins lisible)
+- Multiplie le nombre d'interfaces nécessaires
+- Multiplie le nombre de fonctions nécessaires
+- il est difficile de les coupler avec d’autres types d'implémentations (il est facile de tomber dans un «Type Tetris»)
+
+*/
+
 type LoggerInstruction = ['Info', string] | ['Error', string];
 type DbInstruction = ['Query', UserId] | ['Update', Profile];
 type EmailInstruction = ['SendChangeNotification', EmailMessage];
 type Instruction = LoggerInstruction | DbInstruction | EmailInstruction;
 
-const app: Generator<Instruction, void, unknown> = function* (newProfile: Profile) {
-  const currentProfile = yield ['Query', newProfile.userId];
+const app = function* (newProfile: Profile): Generator<Instruction, void, unknown> {
+  const currentProfile: Profile = (yield ['Query', newProfile.userId]) as Profile;
 
   if (currentProfile !== newProfile) {
     yield ['Info', 'Updating Profile'];
@@ -520,40 +566,39 @@ const interpret = (instruction: Instruction, next: (data: unknown) => void) => {
   switch (instruction[0]) {
     case 'Info': {
       globalLogger.Info(instruction[1]);
-      return next();
+      return next(undefined);
     }
     case 'Error': {
       globalLogger.Error(instruction[1]);
-      return next();
+      return next(undefined);
     }
     case 'Query': {
       const dbConnection = defaultDbService.NewDbConnection();
-      const currentProfile = defaultDbService.QueryProfile(dbConnection)(instruction[1]));
-      return next();
+      const currentProfile = defaultDbService.QueryProfile(dbConnection)(instruction[1]);
+      return next(currentProfile);
     }
     case 'Update': {
       const dbConnection = defaultDbService.NewDbConnection();
-      globalLogger.Error(instruction[1]);
-      return next();
+      const currentProfile = defaultDbService.UpdateProfile(dbConnection)(instruction[1]);
+      return next(currentProfile);
     }
     case 'SendChangeNotification': {
-      defaultEmailService.SendChangeNotification(instruction[1]);
-      return next();
+      defaultEmailService.SendChangeNotification(defaultSmtpCredentials)(instruction[1]);
+      return next(undefined);
     }
   }
 };
 
-
-
-
-const run = <T, R>(interpret: (instruction: T, next: (data: unknown) => void) => void) => (app: Generator<T, R, unknown>) => {
-  const loop = (nextValue) => {
-    const { done, value } = app.next(nextValue);
+const run = <T, TR>(_interpret: (instruction: T, next: (data: unknown) => void) => void) => (
+  _app: Generator<T, TR, unknown>
+) => {
+  const loop = (nextValue: unknown) => {
+    const {done, value} = _app.next(nextValue);
     if (done) return value;
-    interpret(value, loop)
-  }
+    _interpret(value as T, loop);
+  };
 
   return loop(undefined);
 };
 
-run(interpret)(app);
+run(interpret)(app(newProfileA));

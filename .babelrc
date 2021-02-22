@@ -1,0 +1,17 @@
+{
+  "presets": [
+    "@babel/typescript",
+    [
+      "@babel/preset-env",
+      {
+        "targets": {
+          "node": true
+        },
+        "loose": true
+      }
+    ]
+  ],
+  "plugins": [
+    "lodash"
+  ]
+}
