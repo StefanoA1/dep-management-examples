@@ -543,7 +543,7 @@ runReader(prodServices, job);
 Le code décisionnel et code impure (IO, del externes.. etc) sont séparés, les dependances sont données explicitement 
 
 Pros:
-- Le code d'infra/IO est injecté au moment d'appel de la fonction, donc pas compliqué à tester (le switch entre deps prod/test/dev/ etc c'est facile à faire)
+- Le code d'infra/IO est injecté avec l'interpreter
 - Réduction de parametres necessaires 
 
 Cons:
@@ -582,43 +582,48 @@ const app = async function* (newProfile: Profile): AsyncGenerator<Instruction, v
   }
 };
 
-const interpret = (instruction: Instruction, next: (data: unknown) => void) => {
+const interpret = (services: IServices) => (
+  instruction: Instruction,
+  next: (data: unknown) => void
+) => {
   switch (instruction[0]) {
     case 'Info': {
-      globalLogger.Info(instruction[1]);
+      services.logger.Info(instruction[1]);
       return next(undefined);
     }
     case 'Error': {
-      globalLogger.Error(instruction[1]);
+      services.logger.Error(instruction[1]);
       return next(undefined);
     }
     case 'Query': {
       const dbConnection = defaultDbService.NewDbConnection();
-      const currentProfile = defaultDbService.QueryProfile(dbConnection)(instruction[1]);
+      const currentProfile = services.dbService.QueryProfile(dbConnection)(instruction[1]);
       return next(currentProfile);
     }
     case 'Update': {
       const dbConnection = defaultDbService.NewDbConnection();
-      const currentProfile = defaultDbService.UpdateProfile(dbConnection)(instruction[1]);
+      const currentProfile = services.dbService.UpdateProfile(dbConnection)(instruction[1]);
       return next(currentProfile);
     }
     case 'SendChangeNotification': {
-      defaultEmailService.SendChangeNotification(defaultSmtpCredentials)(instruction[1]);
+      services.emailService.SendChangeNotification(defaultSmtpCredentials)(instruction[1]);
       return next(undefined);
     }
   }
 };
 
-const run = <T, TR>(_interpret: (instruction: T, next: (data: unknown) => void) => void) => (
-  _app: AsyncGenerator<T, TR, unknown>
-) => {
+const run = <T, TR>(
+  _interpret: (_services: IServices) => (instruction: T, next: (data: unknown) => void) => void,
+  services: IServices
+) => (_app: AsyncGenerator<T, TR, unknown>) => {
+  const _interpreter = _interpret(services);
   const loop = async (nextValue: unknown) => {
     const {done, value} = await _app.next(nextValue);
     if (done) return value;
-    _interpret(value as T, loop);
+    _interpreter(value as T, loop);
   };
 
   return loop(undefined);
 };
 
-await run(interpret)(app(newProfileA));
+await run(interpret, testServices)(app(newProfileA));
