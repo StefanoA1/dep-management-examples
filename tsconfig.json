@@ -1,9 +1,8 @@
 {
   "compilerOptions": {
-    "jsx": "react",
     "baseUrl": ".",
     "target": "ES2018",
-    "module": "commonjs",
+    "module": "esnext",
     "strict": true,
     "moduleResolution": "node",
     "esModuleInterop": true,

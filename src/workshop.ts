@@ -546,12 +546,14 @@ type DbInstruction = ['Query', UserId] | ['Update', Profile];
 type EmailInstruction = ['SendChangeNotification', EmailMessage];
 type Instruction = LoggerInstruction | DbInstruction | EmailInstruction;
 
-const app = function* (newProfile: Profile): Generator<Instruction, void, unknown> {
-  const currentProfile: Profile = (yield ['Query', newProfile.userId]) as Profile;
+const app = async function* (newProfile: Profile): AsyncGenerator<Instruction, void, unknown> {
+  const currentProfile = await ((yield ['Query', newProfile.userId]) as Promise<
+    Either<Error, Profile>
+  >);
 
-  if (currentProfile !== newProfile) {
+  if (isRight(currentProfile) && currentProfile.right !== newProfile) {
     yield ['Info', 'Updating Profile'];
-    if (currentProfile.emailAddress !== newProfile.emailAddress) {
+    if (currentProfile.right.emailAddress !== newProfile.emailAddress) {
       const emailMessage: EmailMessage = {
         To: newProfile.emailAddress,
         Body: 'Please verify your email'
@@ -595,10 +597,10 @@ const interpret = (instruction: Instruction, next: (data: unknown) => void) => {
 };
 
 const run = <T, TR>(_interpret: (instruction: T, next: (data: unknown) => void) => void) => (
-  _app: Generator<T, TR, unknown>
+  _app: AsyncGenerator<T, TR, unknown>
 ) => {
-  const loop = (nextValue: unknown) => {
-    const {done, value} = _app.next(nextValue);
+  const loop = async (nextValue: unknown) => {
+    const {done, value} = await _app.next(nextValue);
     if (done) return value;
     _interpret(value as T, loop);
   };
@@ -606,4 +608,4 @@ const run = <T, TR>(_interpret: (instruction: T, next: (data: unknown) => void) 
   return loop(undefined);
 };
 
-run(interpret)(app(newProfileA));
+await run(interpret)(app(newProfileA));
