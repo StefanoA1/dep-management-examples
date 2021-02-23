@@ -73,14 +73,14 @@ type IEmailService = {
 // Approach #1: Dependency retention -- retention des dépendances
 /*
 Il ya pas de abstraction ou paramétrisation,
-Le code décisionnel et code impure (IO, del externes.. etc) sont melangés
+Le code décisionnel et code impure (IO, del externes.. etc) sont mélangés
 
 Pros:
 - Rapid à faire (scriptings, prototypes, etc)
 
 Cons:
-- Pas facile à tester (ou meme pas testable de tout)
-- Difficile de refactor (car en chaine pas facile à tester, donc pas backup des tests fiables)
+- Pas facile à tester (ou même pas testable de tout)
+- Difficile de refactor (car en chaîne pas facile à tester, donc pas backup des tests fiables)
 - Les sections de code que pourraient être déterministes sont mélangés
 
 */
@@ -141,13 +141,13 @@ const updateCustomerProfileDepRet = async function* (
 Le code décisionnel et code impure (IO, del externes.. etc) sont (presque) séparés 
 
 Pros:
-- C'est aussi rapid à faire.
+- C'est aussi rapide à faire.
 - La partie décisionnel (déterministe) du code devient testable
 - La partie I/O c'est plus claire à comprendre
 - Un peu plus facile à refactor que si le code était écrit à la Dependency retention (au moins pour la partie décisionnel)
 
 Cons:
-- Pas facile à tester l'ensemble du code (la partie i/o et archi c'est encore pas facilement, voir meme pas, testable)
+- Pas facile à tester l'ensemble du code (la partie i/o et archi c'est encore pas facilement, voir même pas, testable)
 - Difficile de refactor s'il y a des modifications de l'architecture du code
 
 */
@@ -235,7 +235,7 @@ const updateCustomerProfileDR = async function* (
 // -----------------------------------------------------------------------------------------------
 //  Dependency parameterization
 /*
-Le code décisionnel et code impure (IO, del externes.. etc) sont séparés, les dependances sont données explicitement 
+Le code décisionnel et code impure (IO, del externes.. etc) sont séparés, les dépendances sont données explicitement 
 
 Pros:
 - Initialement ça peut prendre plus de temps mais le code devient très flexible pour les modifications
@@ -247,6 +247,7 @@ Cons:
 - Prends plus de temps initialement pour mettre en place
 - Multiplie le nombre d'interfaces nécessaires
 - Les fonctions deviennent gonflées de paramètres
+
 */
 
 const pureUpdateCustomerProfileDP = (
@@ -374,7 +375,7 @@ const updateCustomerProfileDP2 = (
 // Delaying the injection of dependencies
 
 /*
-Le code décisionnel et code impure (IO, del externes.. etc) sont séparés, les dependances sont données explicitement 
+Le code décisionnel et code impure (IO, del externes.. etc) sont séparés, les dépendances sont données explicitement
 
 Pros:
 - Le code d'infra/IO est injecté au moment d'appel de la fonction, donc pas compliqué à tester (le switch entre deps prod/test/dev/ etc c'est facile à faire)
@@ -542,25 +543,26 @@ runReader(prodServices, job);
 // Dependency interpretation
 
 /*
-Le code décisionnel et code impure (IO, del externes.. etc) sont séparés, les dependances sont données explicitement 
+Le code décisionnel et code impure (IO, del externes.. etc) sont séparés, les dépendances sont données explicitement 
 
 Pros:
-- Le code d'infra/IO est toujours parametrizable si souhaité
+- Le code d'infra/IO est toujours paramétrable si souhaité
 - Pas trop de parametres necessaires
 - L'interpreter devient interchangeable
-- Le code pure n'a pas besoin de gérer lui meme le code async (tout peut être compris dans l'interpreter)
+- Le code pure n'a pas besoin de gérer lui même le code async (tout peut être compris dans l'interpreter)
 
 Cons:
 - Plus long à mettre en place (mais contrairement au Reader, c'est plus lisible)
 - Multiplie le nombre d'interfaces nécessaires
 - Multiplie le nombre de fonctions nécessaires
 - il est difficile de les coupler avec d’autres types d'implémentations (il est facile de tomber dans un «Type Tetris»)
-- Contrairement aux techniques de “dependency rejection” et “dependency parameterization”, qui ne nécessitent (presque) aucune 
-  connaissance particulière, les approches Reader et Interpreter demandent plus d'expertise.
+- Contrairement aux techniques de “dependency rejection” et “dependency parameterization”, qui ne nécessitent (presque)
+  aucune connaissance particulière, les approches Reader et Interpreter demandent plus d'expertise.
 - Le debugging c'est plus complexe à suivre
 - Performance: structure de données très profondément imbriquée pour un programme large (ex: +1000 instructions), l'interprétation
-  peut être lente, utiliser beaucoup de mémoire, déclencher plus de garbage collection et même provoquer des stack overflows (il y a
-  des techniques pour soulager ça mais ça complifié le code encore plus - voir Trampolines: https://johnazariah.github.io/2020/12/07/bouncing-around-with-recursion.html#trampolines)
+  peut être lente, utiliser beaucoup de mémoire, déclencher plus de garbage collection et même provoquer des stack overflows.
+  ** Il y a des techniques pour soulager ça mais ça complifié le code encore plus - ex. voir Trampolines: 
+  https://johnazariah.github.io/2020/12/07/bouncing-around-with-recursion.html#trampolines)
 
 */
 
