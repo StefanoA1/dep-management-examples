@@ -520,7 +520,20 @@ const newProfileA: Profile = {
 };
 const job = appMonad(newProfileA);
 
+const testServices: IServices = {
+  dbService: defaultDbService,
+  emailService: defaultEmailService,
+  logger: globalLogger
+};
+
 runReader(testServices, job);
+
+const prodServices: IServices = {
+  dbService: defaultDbService,
+  emailService: defaultEmailService,
+  logger: globalLogger
+};
+
 runReader(prodServices, job);
 
 // -----------------------------------------------------------------------------------------------
