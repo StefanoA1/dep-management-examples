@@ -1,4 +1,4 @@
-# Hello!
+## Hello!
 
 This is a mini repo containing a small Typescript adaptation of my own of this article:
 `https://fsharpforfunandprofit.com/posts/dependencies-5/`
