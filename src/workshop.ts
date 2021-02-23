@@ -16,6 +16,7 @@ We will also add a little bit of logging into the mix.
  */
 
 import * as R from 'fp-ts/lib/Reader';
+import {Either, right, isLeft, isRight} from 'fp-ts/lib/Either';
 
 // --------------------------------------------------
 
@@ -47,7 +48,7 @@ type InfrastructureError = Error;
 
 type DbConnection = () => void; // dummy definition
 
-type Result<TError, T> = T | TError;
+type Result<TError, T> = Either<TError, T>;
 
 type IDbService = {
   NewDbConnection: () => DbConnection;
@@ -85,12 +86,15 @@ Cons:
 const defaultDbService: IDbService = {
   NewDbConnection: () => (): void => {},
   QueryProfile: dbConnection => (userId: UserId) =>
-    Promise.resolve({
-      userId,
-      name: 'MarcoPolo',
-      emailAddress: 'marcopolo@mp.com'
-    }),
-  UpdateProfile: (dbConnection: DbConnection) => (profile: Profile) => Promise.resolve(undefined)
+    Promise.resolve(
+      right({
+        userId,
+        name: 'MarcoPolo',
+        emailAddress: 'marcopolo@mp.com'
+      })
+    ),
+  UpdateProfile: (dbConnection: DbConnection) => (profile: Profile) =>
+    Promise.resolve(right(undefined))
 };
 
 const defaultSmtpCredentials: SmtpCredentials = () => {};
@@ -101,7 +105,7 @@ const globalLogger: ILogger = {
 };
 
 const defaultEmailService: IEmailService = {
-  SendChangeNotification: smtpCredentials => () => Promise.resolve(undefined)
+  SendChangeNotification: smtpCredentials => () => Promise.resolve(right(undefined))
 };
 
 const updateCustomerProfileDepRet = async function* (
@@ -111,12 +115,14 @@ const updateCustomerProfileDepRet = async function* (
   const smtpCredentials = defaultSmtpCredentials;
   const currentProfile = await defaultDbService.QueryProfile(dbConnection)(newProfile.userId);
 
-  if (currentProfile !== newProfile) {
+  if (isLeft(currentProfile)) return;
+
+  if (currentProfile.right !== newProfile) {
     globalLogger.Info('Updating Profile');
     yield defaultDbService.UpdateProfile(dbConnection)(newProfile);
   }
 
-  if ((currentProfile as Profile).emailAddress !== newProfile.emailAddress) {
+  if (currentProfile.right.emailAddress !== newProfile.emailAddress) {
     const emailMessage = {
       To: newProfile.emailAddress,
       Body: 'Please verify your email'
@@ -145,7 +151,7 @@ Cons:
 */
 
 type Decision =
-  | ['NoAction', undefined]
+  | ['NoAction', null]
   | [
       'UpdateProfileOnly',
       {
@@ -160,10 +166,7 @@ type Decision =
       }
     ];
 
-const pureUpdateCustomerProfileDR = (
-  newProfile: Profile,
-  currentProfile: Result<Error, Profile>
-): Decision => {
+const pureUpdateCustomerProfileDR = (newProfile: Profile, currentProfile: Profile): Decision => {
   if (currentProfile !== newProfile && (currentProfile as Profile).emailAddress) {
     globalLogger.Info('Updating Profile');
     if (currentProfile.emailAddress !== newProfile.emailAddress) {
@@ -188,7 +191,7 @@ const pureUpdateCustomerProfileDR = (
       ];
     }
   } else {
-    return ['NoAction', undefined];
+    return ['NoAction', null];
   }
 };
 
@@ -203,7 +206,8 @@ const updateCustomerProfileDR = async function* (
   yield currentProfile;
 
   // ----------- pure ----------------
-  const [decision, result] = pureUpdateCustomerProfileDR(newProfile, currentProfile);
+  if (isLeft(currentProfile)) return;
+  const [decision, result] = pureUpdateCustomerProfileDR(newProfile, currentProfile.right);
 
   // ----------- impure ----------------
   switch (decision) {
@@ -272,7 +276,7 @@ const pureUpdateCustomerProfileDP = (
       ];
     }
   } else {
-    return ['NoAction', undefined];
+    return ['NoAction', null];
   }
 };
 
@@ -294,9 +298,10 @@ const updateCustomerProfileDP = async function* (
   yield currentProfile;
 
   // ----------- pure ----------------
+  if (isLeft(currentProfile)) return;
   const [decision, result] = pureUpdateCustomerProfileDP(
     newProfile,
-    currentProfile,
+    currentProfile.right,
     services.logger
   );
 
@@ -305,11 +310,10 @@ const updateCustomerProfileDP = async function* (
     case 'NoAction':
       return;
     case 'UpdateProfileOnly':
-      if (result && result.profile)
-        yield services.dbService.UpdateProfile(dbConnection)(result.profile);
+      if (result) yield services.dbService.UpdateProfile(dbConnection)(result.profile);
       break;
     case 'UpdateProfileAndNotify':
-      if (result && result.profile) {
+      if (result) {
         yield services.dbService.UpdateProfile(dbConnection)(result.profile);
         yield services.emailService.SendChangeNotification(smtpCredentials)({
           To: result.profile.emailAddress,
@@ -336,9 +340,10 @@ const updateCustomerProfileDP2 = (
     yield currentProfile;
 
     // ----------- pure ----------------
+    if (isLeft(currentProfile)) return;
     const [decision, result] = pureUpdateCustomerProfileDP(
       newProfile,
-      currentProfile,
+      currentProfile.right,
       services.logger
     );
 
@@ -347,12 +352,10 @@ const updateCustomerProfileDP2 = (
       case 'NoAction':
         return;
       case 'UpdateProfileOnly':
-        // TODO: check errors
-        if (result && result.profile)
-          yield services.dbService.UpdateProfile(dbConnection)(result.profile);
+        if (result) yield services.dbService.UpdateProfile(dbConnection)(result.profile);
         break;
       case 'UpdateProfileAndNotify':
-        if (result && result.profile) {
+        if (result) {
           yield services.dbService.UpdateProfile(dbConnection)(result.profile);
           yield services.emailService.SendChangeNotification(smtpCredentials)({
             To: result.profile.emailAddress,
@@ -411,7 +414,7 @@ const pureUpdateCustomerProfileReader = (
       ];
     }
   } else {
-    return ['NoAction', undefined];
+    return ['NoAction', null];
   }
 };
 
@@ -424,8 +427,9 @@ const updateCustomerProfileRM = (services: IServices) => {
     yield currentProfile;
 
     // ----------- pure ----------------
+    if (isLeft(currentProfile)) return;
     const reader: R.Reader<ILogger, Decision> = R.reader.map(
-      pureUpdateCustomerProfileReader(newProfile, currentProfile),
+      pureUpdateCustomerProfileReader(newProfile, currentProfile.right),
       _decision => _decision
     );
     const [decision, result] = reader(services.logger);
@@ -435,11 +439,10 @@ const updateCustomerProfileRM = (services: IServices) => {
       case 'NoAction':
         return;
       case 'UpdateProfileOnly':
-        if (result && result.profile)
-          yield services.dbService.UpdateProfile(dbConnection)(result.profile);
+        if (result) yield services.dbService.UpdateProfile(dbConnection)(result.profile);
         break;
       case 'UpdateProfileAndNotify':
-        if (result && result.profile) {
+        if (result) {
           yield services.dbService.UpdateProfile(dbConnection)(result.profile);
           yield services.emailService.SendChangeNotification(smtpCredentials)({
             To: result.profile.emailAddress,
@@ -480,18 +483,20 @@ const sendChangeNotification: App<EmailMessage, IServices, void> = (
   await env.emailService.SendChangeNotification(defaultSmtpCredentials)(emailMessage);
 };
 
-const queryProfile: App<string, IServices, Profile> = (userId: string) => (env: IServices) => {
+const queryProfile: App<string, IServices, Result<Error, Profile>> = (userId: string) => (
+  env: IServices
+) => {
   const dbConnection_ = env.dbService.NewDbConnection();
-  return env.dbService.QueryProfile(dbConnection_)(userId) as Promise<Profile>;
+  return env.dbService.QueryProfile(dbConnection_)(userId);
 };
 
 const sendEmailLog = logInfo('Sending email');
 
 const appMonad: App<Profile, IServices, void> = (newProfile: Profile) =>
   fmap(queryProfile(newProfile.userId), currentProfile => {
-    if (currentProfile !== newProfile) {
+    if (isRight(currentProfile) && currentProfile.right !== newProfile) {
       return fmap(logInfo('Updating Profile'), () => {
-        if (currentProfile.emailAddress !== newProfile.emailAddress) {
+        if (currentProfile.right.emailAddress !== newProfile.emailAddress) {
           const emailMessage: EmailMessage = {
             To: newProfile.emailAddress,
             Body: 'Please verify your email'
