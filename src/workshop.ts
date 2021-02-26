@@ -1,7 +1,5 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type */
-/* eslint-disable unicorn/consistent-function-scoping */
 /* eslint-disable @typescript-eslint/no-unused-vars */
-/* eslint-disable @typescript-eslint/no-empty-function */
 /**
  * 
  Use case:
@@ -18,121 +16,22 @@ We will also add a little bit of logging into the mix.
  */
 
 import * as R from 'fp-ts/lib/Reader';
-import {Either, right, isLeft, isRight} from 'fp-ts/lib/Either';
-
-// --------------------------------------------------
-
-// the types
-
-// business types
-type UserId = string;
-type UserName = string;
-type EmailAddress = string;
-
-type Profile = {
-  userId: UserId;
-  name: UserName;
-  emailAddress: EmailAddress;
-};
-
-type EmailMessage = {
-  To: EmailAddress;
-  Body: string;
-};
-
-// Infra types
-type ILogger = {
-  Info: (message: string) => void;
-  Error: (message: string) => void;
-};
-
-type InfrastructureError = Error;
-
-type DbConnection = () => void; // dummy definition
-
-type Result<TError, T> = Either<TError, T>;
-
-type IDbService = {
-  NewDbConnection: () => DbConnection;
-  QueryProfile: (
-    dbConnection: DbConnection
-  ) => (userId: UserId) => Promise<Result<InfrastructureError, Profile>>;
-  UpdateProfile: (
-    dbConnection: DbConnection
-  ) => (profile: Profile) => Promise<Result<InfrastructureError, void>>;
-};
-
-type SmtpCredentials = () => void; // dummy definition
-
-type IEmailService = {
-  SendChangeNotification: (
-    smtpCredentials: SmtpCredentials
-  ) => (emailMessage: EmailMessage) => Promise<Result<InfrastructureError, void>>;
-};
-
-// Approach #1: Dependency retention -- retention des dépendances
-/*
-Il ya pas de abstraction ou paramétrisation,
-Le code décisionnel et code impure (IO, del externes.. etc) sont mélangés
-
-Pros:
-- Rapid à faire (scriptings, prototypes, etc)
-
-Cons:
-- Pas facile à tester (ou même pas testable de tout)
-- Difficile de refactor (car en chaîne pas facile à tester, donc pas backup des tests fiables)
-- Les sections de code que pourraient être déterministes sont mélangés
-
-*/
-
-const defaultDbService: IDbService = {
-  NewDbConnection: () => (): void => {},
-  QueryProfile: dbConnection => (userId: UserId) =>
-    Promise.resolve(
-      right({
-        userId,
-        name: 'MarcoPolo',
-        emailAddress: 'marcopolo@mp.com'
-      })
-    ),
-  UpdateProfile: (dbConnection: DbConnection) => (profile: Profile) =>
-    Promise.resolve(right(undefined))
-};
-
-const defaultSmtpCredentials: SmtpCredentials = () => {};
-
-const globalLogger: ILogger = {
-  Info: (message: string) => {},
-  Error: (message: string) => {}
-};
-
-const defaultEmailService: IEmailService = {
-  SendChangeNotification: smtpCredentials => () => Promise.resolve(right(undefined))
-};
-
-const updateCustomerProfileDepRet = async function* (
-  newProfile: Profile
-): AsyncGenerator<unknown, void, unknown> {
-  const dbConnection = defaultDbService.NewDbConnection();
-  const smtpCredentials = defaultSmtpCredentials;
-  const currentProfile = await defaultDbService.QueryProfile(dbConnection)(newProfile.userId);
-
-  if (isLeft(currentProfile)) return;
-
-  if (currentProfile.right !== newProfile) {
-    globalLogger.Info('Updating Profile');
-    yield defaultDbService.UpdateProfile(dbConnection)(newProfile);
-  }
-
-  if (currentProfile.right.emailAddress !== newProfile.emailAddress) {
-    const emailMessage = {
-      To: newProfile.emailAddress,
-      Body: 'Please verify your email'
-    };
-    globalLogger.Info('Sending email');
-    yield defaultEmailService.SendChangeNotification(smtpCredentials)(emailMessage);
-  }
-};
+import {Either, isLeft, isRight} from 'fp-ts/lib/Either';
+import {UserId, Profile, EmailMessage} from './business-types';
+import {
+  IDbService,
+  DbConnection,
+  SmtpCredentials,
+  ILogger,
+  IEmailService,
+  Result
+} from './infra-types';
+import {
+  defaultDbService,
+  defaultSmtpCredentials,
+  globalLogger,
+  defaultEmailService
+} from './default-services';
 
 // -----------------------------------------------------------------------------------------------
 // Dependency rejection
