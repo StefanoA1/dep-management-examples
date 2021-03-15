@@ -16,8 +16,8 @@ We will also add a little bit of logging into the mix.
 import {Either, isRight} from 'fp-ts/lib/Either';
 import {UserId, Profile, EmailMessage} from './business-types';
 import {IServices} from './infra-types';
-import {defaultDbService, defaultSmtpCredentials} from './default-services';
-import {testServices, newProfileA} from './dependency-delay-reader-monad';
+import {defaultDbService, defaultSmtpCredentials, testServices} from './default-services';
+import {newProfileA} from './dependency-delay-reader-monad';
 
 // -----------------------------------------------------------------------------------------------
 // Dependency interpretation

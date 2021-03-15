@@ -5,7 +5,8 @@ import {
   defaultDbService,
   defaultSmtpCredentials,
   globalLogger,
-  defaultEmailService
+  defaultEmailService,
+  testServices
 } from './default-services';
 
 // -----------------------------------------------------------------------------------------------
@@ -97,13 +98,8 @@ export const newProfileA: Profile = {
 
 const job = appMonad(newProfileA);
 
-export const testServices: IServices = {
-  dbService: defaultDbService,
-  emailService: defaultEmailService,
-  logger: globalLogger
-};
-
 runReader(testServices, job);
+
 const prodServices: IServices = {
   dbService: defaultDbService,
   emailService: defaultEmailService,
