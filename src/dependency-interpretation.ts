@@ -1,5 +1,3 @@
-/* eslint-disable @typescript-eslint/explicit-function-return-type */
-/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * 
  Use case:
@@ -78,7 +76,7 @@ const interpret = (services: IServices) => async (
   instruction: Instruction,
   // eslint-disable-next-line @coorpacademy/coorpacademy/no-async-callback
   next: (data: unknown) => void
-) => {
+): Promise<void> => {
   switch (instruction[0]) {
     case 'Info': {
       services.logger.Info(instruction[1]);
@@ -107,8 +105,8 @@ const interpret = (services: IServices) => async (
 
 const run = <T, TR>(_interpret: (instruction: T, next: (data: unknown) => void) => void) => (
   _app: Generator<T, TR, unknown>
-) => {
-  const loop = async (nextValue: unknown) => {
+): Promise<T | TR | undefined> => {
+  const loop = async (nextValue: unknown): Promise<T | TR | undefined> => {
     const {done, value} = _app.next(nextValue);
     if (done) return value;
     await _interpret(value as T, loop);
