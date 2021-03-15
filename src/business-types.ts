@@ -10,3 +10,19 @@ export type EmailMessage = {
   To: EmailAddress;
   Body: string;
 };
+
+export type Decision =
+  | ['NoAction', null]
+  | [
+      'UpdateProfileOnly',
+      {
+        profile: Profile;
+      }
+    ]
+  | [
+      'UpdateProfileAndNotify',
+      {
+        profile: Profile;
+        emailMessage: EmailMessage;
+      }
+    ];

@@ -22,7 +22,7 @@ import {
   globalLogger
 } from './default-services';
 
-export const updateCustomerProfileDepRet = async function* (
+export const updateCustomerProfile = async function* (
   newProfile: Profile
 ): AsyncGenerator<unknown, void, unknown> {
   const dbConnection = defaultDbService.NewDbConnection();

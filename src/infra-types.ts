@@ -25,3 +25,9 @@ export type IEmailService = {
     smtpCredentials: SmtpCredentials
   ) => (emailMessage: EmailMessage) => Promise<Result<InfrastructureError, null>>;
 };
+
+export type IServices = {
+  logger: ILogger;
+  dbService: IDbService;
+  emailService: IEmailService;
+};
