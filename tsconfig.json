@@ -9,7 +9,8 @@
     "noImplicitAny": true,
     "skipLibCheck": true,
     "incremental": true,
-    "useUnknownInCatchVariables": false
+    "useUnknownInCatchVariables": false,
+    "noErrorTruncation": true
   },
   "ts-node": {
     "transpileOnly": true

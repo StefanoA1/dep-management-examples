@@ -56,3 +56,5 @@ es
 tmp
 .eslintcache
 dist
+
+tsconfig.tsbuildinfo

@@ -9,21 +9,27 @@ import {
   SmtpCredentials,
   ILogger,
   IEmailService,
-  IServices
+  IServices,
+  DbError,
+  EmailError
 } from './infra-types';
 
 export const defaultDbService: IDbService = {
   NewDbConnection: () => (): void => {},
-  QueryProfile: dbConnection => (userId: UserId): Promise<Either<Error, Profile>> =>
-    Promise.resolve(
-      right({
-        userId,
-        name: 'MarcoPolo',
-        emailAddress: 'marcopolo@mp.com'
-      })
-    ),
-  UpdateProfile: (dbConnection: DbConnection) => (profile: Profile): Promise<Either<Error, null>> =>
-    Promise.resolve(right(null))
+  QueryProfile:
+    dbConnection =>
+    (userId: UserId): Promise<Either<DbError, Profile>> =>
+      Promise.resolve(
+        right({
+          userId,
+          name: 'MarcoPolo',
+          emailAddress: 'marcopolo@mp.com'
+        })
+      ),
+  UpdateProfile:
+    (dbConnection: DbConnection) =>
+    (profile: Profile): Promise<Either<DbError, null>> =>
+      Promise.resolve(right(null))
 };
 
 export const defaultSmtpCredentials: SmtpCredentials = () => {};
@@ -34,7 +40,7 @@ export const globalLogger: ILogger = {
 };
 
 export const defaultEmailService: IEmailService = {
-  SendChangeNotification: smtpCredentials => (): Promise<Either<Error, null>> =>
+  SendChangeNotification: smtpCredentials => (): Promise<Either<EmailError, null>> =>
     Promise.resolve(right(null))
 };
 
