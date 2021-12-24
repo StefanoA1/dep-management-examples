@@ -30,7 +30,10 @@ Cons:
 type Reader<E, T> = (env: E) => Promise<T>;
 type App<A, E, T> = (a: A) => Reader<E, T>;
 const runReader = <E, T>(env: E, fa: Reader<E, T>): Promise<T> => fa(env);
-const pure = <E, T>(a: T): Reader<E, T> => (): Promise<T> => Promise.resolve(a);
+const pure =
+  <E, T>(a: T): Reader<E, T> =>
+  (): Promise<T> =>
+    Promise.resolve(a);
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const map = <E, A, B>(fa: Reader<E, A>, ab: (a: A) => B): Reader<E, B> => {
@@ -43,29 +46,30 @@ const fmap = <E, A, B>(fa: Reader<E, A>, afb: (a: A) => Reader<E, B>): Reader<E,
   };
 };
 
-const logInfo: App<string, IServices, void> = (message: string) => (
-  env: IServices
-): Promise<void> => Promise.resolve(env.logger.Info(message));
+const logInfo: App<string, IServices, void> =
+  (message: string) =>
+  (env: IServices): Promise<void> =>
+    Promise.resolve(env.logger.Info(message));
 
-const update: App<Profile, IServices, void> = (profile: Profile) => async (
-  env: IServices
-): Promise<void> => {
-  const dbConnection = defaultDbService.NewDbConnection();
-  await env.dbService.UpdateProfile(dbConnection)(profile);
-};
+const update: App<Profile, IServices, void> =
+  (profile: Profile) =>
+  async (env: IServices): Promise<void> => {
+    const dbConnection = env.dbService.NewDbConnection();
+    await env.dbService.UpdateProfile(dbConnection)(profile);
+  };
 
-const sendChangeNotification: App<EmailMessage, IServices, void> = (
-  emailMessage: EmailMessage
-) => async (env: IServices): Promise<void> => {
-  await env.emailService.SendChangeNotification(defaultSmtpCredentials)(emailMessage);
-};
+const sendChangeNotification: App<EmailMessage, IServices, void> =
+  (emailMessage: EmailMessage) =>
+  async (env: IServices): Promise<void> => {
+    await env.emailService.SendChangeNotification(defaultSmtpCredentials)(emailMessage);
+  };
 
-const queryProfile: App<string, IServices, Result<Error, Profile>> = (userId: string) => (
-  env: IServices
-): Promise<Result<Error, Profile>> => {
-  const dbConnection_ = env.dbService.NewDbConnection();
-  return env.dbService.QueryProfile(dbConnection_)(userId);
-};
+const queryProfile: App<string, IServices, Result<Error, Profile>> =
+  (userId: string) =>
+  (env: IServices): Promise<Result<Error, Profile>> => {
+    const dbConnection_ = env.dbService.NewDbConnection();
+    return env.dbService.QueryProfile(dbConnection_)(userId);
+  };
 
 const sendEmailLog = logInfo('Sending email');
 
