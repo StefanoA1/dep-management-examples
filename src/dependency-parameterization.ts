@@ -1,7 +1,7 @@
 import {isLeft} from 'fp-ts/lib/Either';
 import {Profile, EmailMessage, Decision} from './business-types';
-import {DbConnection, SmtpCredentials, ILogger, IServices} from './infra-types';
-import {defaultDbService, defaultSmtpCredentials} from './default-services';
+import {SmtpCredentials, ILogger, IServices} from './infra-types';
+import {defaultSmtpCredentials} from './default-services';
 
 // -----------------------------------------------------------------------------------------------
 //  Dependency parameterization
@@ -57,11 +57,12 @@ export const updateCustomerProfile = async function* (
   newProfile: Profile,
   services: IServices
 ): AsyncGenerator<unknown, void, unknown> {
-  const dbConnection = defaultDbService.NewDbConnection();
+  const {dbService} = services;
+  const dbConnection = dbService.NewDbConnection();
   const smtpCredentials = defaultSmtpCredentials;
 
   // ----------- impure ----------------
-  const currentProfile = await defaultDbService.QueryProfile(dbConnection)(newProfile.userId);
+  const currentProfile = await dbService.QueryProfile(dbConnection)(newProfile.userId);
   yield currentProfile;
 
   // ----------- pure ----------------
@@ -91,21 +92,21 @@ export const updateCustomerProfile = async function* (
       break;
   }
 };
-// const dbConnection = defaultDbService.NewDbConnection();
-// const smtpCredentials = defaultSmtpCredentials;
+
 // very similar to ports? services -> function -> result
 export const updateCustomerProfileV2 = (
   services: IServices,
-  dbConnection: DbConnection,
   smtpCredentials: SmtpCredentials
-) => {
+): ((newProfile: Profile) => AsyncGenerator<unknown, void, unknown>) => {
+  const {dbService} = services;
   return async function* (newProfile: Profile): AsyncGenerator<unknown, void, unknown> {
+    const dbConnection = dbService.NewDbConnection();
     // ----------- impure ----------------
-    const currentProfile = await defaultDbService.QueryProfile(dbConnection)(newProfile.userId);
+    const currentProfile = await dbService.QueryProfile(dbConnection)(newProfile.userId);
     yield currentProfile;
 
     // ----------- pure ----------------
-    if (isLeft(currentProfile)) return;
+    if (isLeft(currentProfile)) throw currentProfile.left;
     const [decision, result] = pureUpdateCustomerProfile(
       newProfile,
       currentProfile.right,
