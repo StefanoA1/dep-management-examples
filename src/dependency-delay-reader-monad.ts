@@ -1,12 +1,12 @@
-import {isRight} from 'fp-ts/lib/Either';
+import {isLeft, isRight} from 'fp-ts/lib/Either';
 import {Profile, EmailMessage} from './business-types';
 import {IServices, Result} from './infra-types';
 import {
-  defaultDbService,
-  defaultSmtpCredentials,
-  globalLogger,
-  defaultEmailService,
-  testServices
+  // defaultDbService,
+  defaultSmtpCredentials
+  // globalLogger,
+  // defaultEmailService,
+  // testServices
 } from './default-services';
 
 // -----------------------------------------------------------------------------------------------
@@ -29,11 +29,11 @@ Cons:
 
 type Reader<E, T> = (env: E) => Promise<T>;
 type App<A, E, T> = (a: A) => Reader<E, T>;
-const runReader = <E, T>(env: E, fa: Reader<E, T>): Promise<T> => fa(env);
+export const runReader = <E, T>(env: E, fa: Reader<E, T>): Promise<T> => fa(env);
 const pure =
-  <E, T>(a: T): Reader<E, T> =>
+  <E, T>(a: T, rejectP?: boolean): Reader<E, T> =>
   (): Promise<T> =>
-    Promise.resolve(a);
+    rejectP ? Promise.reject(a) : Promise.resolve(a);
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const map = <E, A, B>(fa: Reader<E, A>, ab: (a: A) => B): Reader<E, B> => {
@@ -73,7 +73,8 @@ const queryProfile: App<string, IServices, Result<Error, Profile>> =
 
 const sendEmailLog = logInfo('Sending email');
 
-const appMonad: App<Profile, IServices, void> = (newProfile: Profile) =>
+export const monadApp: App<Profile, IServices, void | Error> = (newProfile: Profile) =>
+  // @ts-expect-error type mismatch
   fmap(queryProfile(newProfile.userId), currentProfile => {
     if (isRight(currentProfile) && currentProfile.right !== newProfile) {
       return fmap(logInfo('Updating Profile'), () => {
@@ -89,25 +90,27 @@ const appMonad: App<Profile, IServices, void> = (newProfile: Profile) =>
           return update(newProfile);
         }
       });
+    } else if (isLeft(currentProfile)) {
+      return pure(currentProfile.left, true);
     } else {
       return pure(undefined);
     }
   });
 
-export const newProfileA: Profile = {
-  userId: 'someid1',
-  emailAddress: 'toto@coorpacademy.com',
-  name: 'Toto Foo'
-};
+// export const newProfileA: Profile = {
+//   userId: 'someid1',
+//   emailAddress: 'toto@coorpacademy.com',
+//   name: 'Toto Foo'
+// };
 
-const job = appMonad(newProfileA);
+// const job = monadApp(newProfileA);
 
-runReader(testServices, job);
+// runReader(testServices, job);
 
-const prodServices: IServices = {
-  dbService: defaultDbService,
-  emailService: defaultEmailService,
-  logger: globalLogger
-};
+// const prodServices: IServices = {
+//   dbService: defaultDbService,
+//   emailService: defaultEmailService,
+//   logger: globalLogger
+// };
 
-runReader(prodServices, job);
+// runReader(prodServices, job);

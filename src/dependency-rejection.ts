@@ -10,7 +10,7 @@ import {
 // -----------------------------------------------------------------------------------------------
 // Dependency rejection
 /*
-Le code décisionnel et code impure (IO, del externes.. etc) sont (presque) séparés
+Le code décisionnel et code impure (IO, dep externes.. etc) sont (presque) séparés
 
 Pros:
 - C'est aussi rapide à faire.
@@ -19,7 +19,7 @@ Pros:
 - Un peu plus facile à refactor que si le code était écrit à la Dependency retention (au moins pour la partie décisionnel)
 
 Cons:
-- Pas facile à tester l'ensemble du code (la partie i/o et archi c'est encore pas facilement, voir même pas, testable)
+- Pas facile à tester l'ensemble du code (la partie i/o et archi c'est encore pas facilement (voir même pas) testable)
 - Difficile de refactor s'il y a des modifications de l'architecture du code
 
 */

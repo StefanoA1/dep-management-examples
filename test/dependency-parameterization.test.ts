@@ -84,7 +84,7 @@ test('Update customer profile if the user is found', async t => {
   t.is(iterations, 2);
 });
 
-test('if user is not found, do nothing', async t => {
+test('if user is not found, throw error', async t => {
   t.plan(6);
   const expectedProfile: Profile = {
     userId: '1234',

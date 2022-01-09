@@ -13,7 +13,7 @@ We will also add a little bit of logging into the mix.
 
  */
 
-import {Either, isRight} from 'fp-ts/lib/Either';
+import {Either, isLeft, isRight} from 'fp-ts/lib/Either';
 import {UserId, Profile, EmailMessage} from './business-types';
 import {IServices} from './infra-types';
 import {defaultSmtpCredentials} from './default-services';
@@ -51,7 +51,9 @@ type DbInstruction = ['Query', UserId] | ['Update', Profile];
 type EmailInstruction = ['SendChangeNotification', EmailMessage];
 type Instruction = LoggerInstruction | DbInstruction | EmailInstruction;
 
-export const app = function* (newProfile: Profile): Generator<Instruction, void, unknown> {
+export const app = function* (
+  newProfile: Profile
+): Generator<Instruction, void | string[], unknown> {
   const currentProfile = (yield ['Query', newProfile.userId]) as Either<Error, Profile>;
 
   if (isRight(currentProfile) && currentProfile.right !== newProfile) {
@@ -67,8 +69,10 @@ export const app = function* (newProfile: Profile): Generator<Instruction, void,
     } else {
       yield ['Update', newProfile];
     }
+  } else if (isLeft(currentProfile)) {
+    yield ['Error', currentProfile.left.message];
   } else {
-    return;
+    return ['Error', 'unknown error'];
   }
 };
 
@@ -80,6 +84,7 @@ export const interpret =
     next: (data: unknown) => void
   ): Promise<void> => {
     const {dbService, emailService, logger} = services;
+
     switch (instruction[0]) {
       case 'Info': {
         logger.Info(instruction[1]);
@@ -87,7 +92,7 @@ export const interpret =
       }
       case 'Error': {
         logger.Error(instruction[1]);
-        return next(undefined);
+        return next(new Error(instruction[1]));
       }
       case 'Query': {
         const dbConnection = dbService.NewDbConnection();
@@ -107,15 +112,18 @@ export const interpret =
   };
 
 export const run =
-  <T, TR>(_interpret: (instruction: T, next: (data: unknown) => void) => void) =>
+  <T, TR>(
+    _interpret: (
+      instruction: T,
+      next: (data: T | TR | undefined) => Promise<T | TR | undefined>
+    ) => T | TR | undefined
+  ) =>
   (_app: Generator<T, TR, unknown>): Promise<T | TR | undefined> => {
-    const loop = async (nextValue: unknown): Promise<T | TR | undefined> => {
-      const {done, value} = _app.next(nextValue);
-      if (done) return value;
-      await _interpret(value as T, loop);
+    const loop = async (nextValue: T | TR | undefined): Promise<T | TR | undefined> => {
+      const {done, value} = await _app.next(nextValue);
+      if (done) return !value ? nextValue : value;
+      return _interpret(value as T, loop);
     };
 
     return loop(undefined);
   };
-
-// await run(interpret(testServices))(app(newProfileA));
