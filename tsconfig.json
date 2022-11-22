@@ -1,12 +1,18 @@
 {
   "compilerOptions": {
     "baseUrl": ".",
-    "target": "ES2018",
-    "module": "esnext",
+    "target": "ES2019",
+    "module": "commonjs",
     "strict": true,
     "moduleResolution": "node",
     "esModuleInterop": true,
     "noImplicitAny": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "incremental": true,
+    "useUnknownInCatchVariables": false,
+    "noErrorTruncation": true
+  },
+  "ts-node": {
+    "transpileOnly": true
   }
 }

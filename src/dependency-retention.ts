@@ -26,7 +26,6 @@ export const updateCustomerProfile = async function* (
   newProfile: Profile
 ): AsyncGenerator<unknown, void, unknown> {
   const dbConnection = defaultDbService.NewDbConnection();
-  const smtpCredentials = defaultSmtpCredentials;
   const currentProfile = await defaultDbService.QueryProfile(dbConnection)(newProfile.userId);
 
   if (isLeft(currentProfile)) return;
@@ -42,6 +41,6 @@ export const updateCustomerProfile = async function* (
       Body: 'Please verify your email'
     };
     globalLogger.Info('Sending email');
-    yield defaultEmailService.SendChangeNotification(smtpCredentials)(emailMessage);
+    yield defaultEmailService.SendChangeNotification(defaultSmtpCredentials)(emailMessage);
   }
 };

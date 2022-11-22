@@ -6,11 +6,11 @@ module.exports = {
   },
   overrides: [
     {
-      files: ['src/**/*.ts'],
+      files: ['src/**/*.ts', 'test/**/*.ts'],
       env: {
         browser: false,
         es6: true,
-        node: false
+        node: true
       }
     }
   ],
@@ -27,18 +27,15 @@ module.exports = {
   parser: '@typescript-eslint/parser',
   settings: {
     'import/ignore': ['node_modules'],
-    'import/extensions': ['.js', '.ts', '.tsx'],
+    'import/extensions': ['.js', '.ts'],
     'import/resolver': {
       node: {
-        extensions: ['.js', '.jsx', '.ts', '.tsx', '.json', '.d.ts']
+        extensions: ['.js', '.ts', '.json', '.d.ts']
       }
     },
     node: {
       resolvePaths: ['node_modules/@types'],
-      tryExtensions: ['.js', '.json', '.ts', '.d.ts', 'tsx']
-    },
-    react: {
-      version: 'detect'
+      tryExtensions: ['.js', '.json', '.ts', '.d.ts']
     }
   },
   rules: {
@@ -93,7 +90,7 @@ module.exports = {
     'node/no-missing-import': [
       'error',
       {
-        tryExtensions: ['.js', '.json', '.tsx', '.ts', '.d.ts']
+        tryExtensions: ['.js', '.json', '.ts', '.d.ts']
       }
     ]
   },

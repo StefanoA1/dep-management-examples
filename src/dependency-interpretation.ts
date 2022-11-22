@@ -13,11 +13,11 @@ We will also add a little bit of logging into the mix.
 
  */
 
-import {Either, isRight} from 'fp-ts/lib/Either';
+import {Either, isLeft, isRight} from 'fp-ts/lib/Either';
 import {UserId, Profile, EmailMessage} from './business-types';
 import {IServices} from './infra-types';
-import {defaultDbService, defaultSmtpCredentials} from './default-services';
-import {testServices, newProfileA} from './dependency-delay-reader-monad';
+import {defaultSmtpCredentials} from './default-services';
+// import {newProfileA} from './dependency-delay-reader-monad';
 
 // -----------------------------------------------------------------------------------------------
 // Dependency interpretation
@@ -51,7 +51,9 @@ type DbInstruction = ['Query', UserId] | ['Update', Profile];
 type EmailInstruction = ['SendChangeNotification', EmailMessage];
 type Instruction = LoggerInstruction | DbInstruction | EmailInstruction;
 
-const app = function* (newProfile: Profile): Generator<Instruction, void, unknown> {
+export const app = function* (
+  newProfile: Profile
+): Generator<Instruction, void | string[], unknown> {
   const currentProfile = (yield ['Query', newProfile.userId]) as Either<Error, Profile>;
 
   if (isRight(currentProfile) && currentProfile.right !== newProfile) {
@@ -67,52 +69,61 @@ const app = function* (newProfile: Profile): Generator<Instruction, void, unknow
     } else {
       yield ['Update', newProfile];
     }
+  } else if (isLeft(currentProfile)) {
+    yield ['Error', currentProfile.left.message];
   } else {
-    return;
+    return ['Error', 'unknown error'];
   }
 };
 
-const interpret = (services: IServices) => async (
-  instruction: Instruction,
-  // eslint-disable-next-line @coorpacademy/coorpacademy/no-async-callback
-  next: (data: unknown) => void
-): Promise<void> => {
-  switch (instruction[0]) {
-    case 'Info': {
-      services.logger.Info(instruction[1]);
-      return next(undefined);
-    }
-    case 'Error': {
-      services.logger.Error(instruction[1]);
-      return next(undefined);
-    }
-    case 'Query': {
-      const dbConnection = defaultDbService.NewDbConnection();
-      const currentProfile = await services.dbService.QueryProfile(dbConnection)(instruction[1]);
-      return next(currentProfile);
-    }
-    case 'Update': {
-      const dbConnection = defaultDbService.NewDbConnection();
-      const currentProfile = await services.dbService.UpdateProfile(dbConnection)(instruction[1]);
-      return next(currentProfile);
-    }
-    case 'SendChangeNotification': {
-      await services.emailService.SendChangeNotification(defaultSmtpCredentials)(instruction[1]);
-      return next(undefined);
-    }
-  }
-};
+export const interpret =
+  (services: IServices) =>
+  async (
+    instruction: Instruction,
+    // eslint-disable-next-line @coorpacademy/coorpacademy/no-async-callback
+    next: (data: unknown) => void
+  ): Promise<void> => {
+    const {dbService, emailService, logger} = services;
 
-const run = <T, TR>(_interpret: (instruction: T, next: (data: unknown) => void) => void) => (
-  _app: Generator<T, TR, unknown>
-): Promise<T | TR | undefined> => {
-  const loop = async (nextValue: unknown): Promise<T | TR | undefined> => {
-    const {done, value} = _app.next(nextValue);
-    if (done) return value;
-    await _interpret(value as T, loop);
+    switch (instruction[0]) {
+      case 'Info': {
+        logger.Info(instruction[1]);
+        return next(undefined);
+      }
+      case 'Error': {
+        logger.Error(instruction[1]);
+        return next(new Error(instruction[1]));
+      }
+      case 'Query': {
+        const dbConnection = dbService.NewDbConnection();
+        const currentProfile = await dbService.QueryProfile(dbConnection)(instruction[1]);
+        return next(currentProfile);
+      }
+      case 'Update': {
+        const dbConnection = dbService.NewDbConnection();
+        const currentProfile = await dbService.UpdateProfile(dbConnection)(instruction[1]);
+        return next(currentProfile);
+      }
+      case 'SendChangeNotification': {
+        await emailService.SendChangeNotification(defaultSmtpCredentials)(instruction[1]);
+        return next(undefined);
+      }
+    }
   };
 
-  return loop(undefined);
-};
+export const run =
+  <T, TR>(
+    _interpret: (
+      instruction: T,
+      next: (data: T | TR | undefined) => Promise<T | TR | undefined>
+    ) => T | TR | undefined
+  ) =>
+  (_app: Generator<T, TR, unknown>): Promise<T | TR | undefined> => {
+    const loop = async (nextValue: T | TR | undefined): Promise<T | TR | undefined> => {
+      const {done, value} = await _app.next(nextValue);
+      if (done) return !value ? nextValue : value;
+      return _interpret(value as T, loop);
+    };
 
-await run(interpret(testServices))(app(newProfileA));
+    return loop(undefined);
+  };
