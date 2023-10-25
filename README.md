@@ -18,3 +18,5 @@ Read the user’s current profile from the database
 If the profile has changed, update the user’s profile in the database
 If the email has changed, send a verification email message to the user’s new email
 Add a little bit of logging into the mix
+
+Keywords: Deterministic code, pure code.
